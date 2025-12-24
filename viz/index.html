@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Visualizações CAGED</title>
+  <script src="https://code.highcharts.com/highcharts.js"></script>
+  <script src="https://code.highcharts.com/highcharts-more.js"></script>
+  <style>
+    :root { --brand: #399d4e; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: #0f1115; color: #e7e7e7; }
+    header { padding: 16px 20px; background: var(--brand); color: #fff; font-weight: 600; letter-spacing: 0.2px; }
+    main { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+    .card-btn { background: #151922; border: 1px solid #1f2532; color: #dbe6df; padding: 14px 16px; border-radius: 10px; cursor: pointer; transition: transform .08s ease, border-color .2s ease; }
+    .card-btn:hover { transform: translateY(-1px); border-color: var(--brand); }
+    .chart-wrap { margin-top: 20px; background: #0b0e13; border: 1px solid #141a24; border-radius: 12px; padding: 12px; display: none; }
+    .chart-title { margin: 0 0 8px 4px; color: #cfe7d4; font-size: 14px; letter-spacing: .2px; }
+    .muted { color: #9aa3a8; font-size: 13px; margin: 6px 0 0 4px; }
+  </style>
+</head>
+<body>
+  <header>Visualizações CAGED</header>
+  <main>
+    <h3 style="margin: 8px 0 14px 4px; color:#cfe7d4;">Selecione um gráfico</h3>
+    <div class="grid">
+  <button class="card-btn" onclick="openChart('genero')">Gênero</button>
+  <button class="card-btn" onclick="openChart('raca')">Raça/Cor</button>
+  <button class="card-btn" onclick="openChart('escolaridade')">Escolaridade (empilhado)</button>
+  <button class="card-btn" onclick="openChart('deficiencia')">Deficiência</button>
+      <!-- Novos botões entram aqui futuramente -->
+    </div>
+
+    <section id="chartSection" class="chart-wrap">
+      <p class="chart-title" id="chartTitle"></p>
+      <div id="chartContainer" style="height: 520px;"></div>
+      <p class="muted" id="chartSubtitle"></p>
+    </section>
+  </main>
+
+  <script>
+    async function openChart(name){
+      const section = document.getElementById('chartSection');
+      const titleEl = document.getElementById('chartTitle');
+      const subtitleEl = document.getElementById('chartSubtitle');
+      section.style.display = 'block';
+      titleEl.textContent = 'Carregando…';
+      subtitleEl.textContent = '';
+      try{
+        const res = await fetch(`data/${name}.json?ts=${Date.now()}`);
+        if(!res.ok) throw new Error('Falha ao carregar dados');
+        const payload = await res.json();
+        titleEl.textContent = payload.title || '';
+        subtitleEl.textContent = payload.subtitle || '';
+        const chartCfg = payload.chart || {};
+        Highcharts.chart('chartContainer', {
+          chart: { backgroundColor: '#0b0e13', style: { fontFamily: 'inherit' } },
+          title: { text: '' },
+          xAxis: { categories: payload.categories || [], gridLineColor: '#1a2030', labels:{ style:{ color:'#b9c1c6' } }},
+          yAxis: { title: { text: payload.yAxisTitle || '' }, gridLineColor: '#1a2030', labels:{ style:{ color:'#b9c1c6' }} },
+          legend: { itemStyle: { color:'#dbe6df' } },
+          plotOptions: {
+            series: {
+              // Corrige typo 'undef ined' -> 'undefined' e define marker padrão seguro
+              stacking: chartCfg.stacking || undefined,
+              grouping: chartCfg.grouping !== undefined ? chartCfg.grouping : undefined,
+              borderWidth: chartCfg.seriesType === 'column' ? 0 : undefined,
+              // Sem marker global; será definido por série quando necessário
+            }
+          },
+          tooltip: chartCfg.tooltipMode === 'percent-with-abs'
+            ? { shared: true, formatter: function(){
+                const p = this.point, total = this.total || 0;
+                const pct = (p.percentage !== undefined) ? Highcharts.numberFormat(p.percentage, 2) + '%' : '';
+                const val = (typeof p.y === 'number') ? Highcharts.numberFormat(p.y, 0, ',', '.') : p.y;
+                return `<b>${this.x}</b><br/>${p.series.name}: ${val} (${pct})`;
+              } }
+            : { shared: true, valuePrefix: 'R$ ' },
+          series: (payload.series || []).map((s, i) => ({
+            type: chartCfg.seriesType || 'line', name: s.name, data: s.data,
+            stack: s.stack,
+            // Prioriza cor do payload; fallback para paleta multi-cores
+            color: s.color || ['#4e79a7','#e15759','#f28e2b','#edc948','#b07aa1','#59a14f','#76b7b2','#ff9da7','#9c755f','#bab0ac'][i % 10],
+            lineWidth: (chartCfg.seriesType || 'line') === 'line' ? 2.2 : undefined,
+            // Define marker por série para linhas: sem pontos visíveis e símbolo padrão
+            marker: (chartCfg.seriesType || 'line') === 'line' ? { enabled: false, symbol: 'circle' } : undefined,
+          })),
+          credits: { enabled: false }
+        });
+      }catch(err){
+        titleEl.textContent = 'Erro ao carregar';
+        subtitleEl.textContent = err?.message || String(err);
+      }
+    }
+  </script>
+</body>
+</html>
